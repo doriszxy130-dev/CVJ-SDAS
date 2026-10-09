@@ -109,7 +109,7 @@ ax8b.set_title(f'B  ROC Curve (AUC={auc_pb:.4f}, Acc={acc_pb:.4f}, F1={f1_pb:.4f
 ax8b.legend(fontsize=10, loc='lower right', framealpha=0.85)
 ax8b.set_aspect('equal'); ax8b.grid(alpha=0.15)
 
-fig8.suptitle('Figure 10. Prospective test — binary disease screening (266 images)',
+fig8.suptitle('Figure 10. Prospective test — binary disease screening (267 images)',
              fontsize=13, fontweight='bold', y=0.98)
 fig8.savefig(OUT_DIR / 'Figure_10_Prospective_Binary.png', dpi=300, bbox_inches='tight', pad_inches=0.3)
 fig8.savefig(OUT_DIR / 'Figure_10_Prospective_Binary.pdf', dpi=300, bbox_inches='tight', pad_inches=0.3)
