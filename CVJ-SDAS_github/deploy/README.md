@@ -1,140 +1,147 @@
-# Atlantoaxial Disease Classification System
+Atlantoaxial Disease Classification System
 
-> 寰枢椎疾病自动分类系统 — YOLOv8 椎体检测 → ResNet50 疾病分类
+> Automated analysis of atlantoaxial disease: YOLOv8 spine ROI detection → ResNet50 disease classification.
 
-## 1. 项目概述 / Overview
+## 1. Overview
 
-本系统用于颈椎 X 线片的自动化分析：先检测脊柱 ROI 区域，再判断是否存在寰枢椎相关疾病，并对 6 类疾病进行多标签分类。
+This system analyzes cervical spine radiographs by first detecting the spine region of interest (ROI), then identifying the presence of atlantoaxial-related disease and performing multilabel classification for six conditions.
 
-**训练数据**: 7,778 张回顾性图像 (2,802 患者) + 3,054 张公开正常图像  
-**外部验证**: 643 张 (4 家多中心医院)  
-**前瞻测试**: 267 张 (1 家新医院)
+**Model development data:** 7,778 retrospective images from 2,802 patients, plus 3,054 publicly available normal images.  
+**External validation:** 643 images from four independent hospitals.  
+**Prospective testing:** 267 images collected prospectively at Hospital A.
 
 ---
 
-## 2. 模型架构 / Architecture
+## 2. Architecture
 
-```
-输入 X 线片
+```text
+Input cervical spine radiograph
     │
     ▼
-┌─────────────────────────────────┐
-│ ① YOLOv8s                       │  目标检测 → 脊柱 ROI bbox
-│    bbox 可手动修正              │
-└─────────────────────────────────┘
-    │ crop + 10% padding + Resize(224×224)
+┌───────────────────────────────────────────┐
+│ ① YOLOv8s                                 │
+│    Spine ROI detection                    │
+│    Bounding box can be manually adjusted  │
+└───────────────────────────────────────────┘
+    │ Crop + 10% padding + resize to 224 × 224
     ▼
-      ┌──────────────────────────┐
-      │ ② Binary ResNet50 (1 out)│  → 是否有病? + 置信度
-      └──────────────────────────┘
-      ┌──────────────────────────┐
-      │ ③ Multilabel ResNet50    │  → 6 类疾病概率分布
-      │    (6 outputs)           │
-      └──────────────────────────┘
+┌───────────────────────────────────────────┐
+│ ② Binary ResNet50 (1 output)              │
+│    Disease presence + confidence          │
+└───────────────────────────────────────────┘
+┌───────────────────────────────────────────┐
+│ ③ Multilabel ResNet50 (6 outputs)         │
+│    Probabilities for six disease classes  │
+└───────────────────────────────────────────┘
     │
     ▼
-输出: { disease_present: bool, diseases: [{name, confidence}, ...] }
+Output: disease presence, detected diseases, and confidence scores
 ```
 
-### 模型配置
+### Model Configuration
 
-| 组件 | 模型 | 输入尺寸 | 输出 | 权重文件 |
+| Component | Model | Input Size | Output | Weight File |
 |---|---|---|---|---|
-| BBox 检测 | YOLOv8s | 640×640 | 1 bbox + conf | `yolo_best.pt` (22 MB) |
-| 二分类 | ResNet50 | 224×224 | 1 logit | `binary_best.pt` (90 MB) |
-| 多标签 | ResNet50 | 224×224 | 6 logits | `multilabel_best.pt` (91 MB) |
+| Bounding-box detection | YOLOv8s | 640 × 640 | One bounding box and confidence score | `yolo_best.pt` (22 MB) |
+| Binary classification | ResNet50 | 224 × 224 | One logit | `binary_best.pt` (90 MB) |
+| Multilabel classification | ResNet50 | 224 × 224 | Six logits | `multilabel_best.pt` (91 MB) |
+
+**Weight availability:** The three study-trained final weight files are not currently included in the repository or submission package. Running inference requires obtaining these files separately and placing them in `deploy/`. Their access or sharing arrangements remain to be finalized.
 
 ---
 
-## 3. 疾病类别 / Disease Classes
+## 3. Disease Classes
 
-| # | 英文 | 中文 | 缩写 |
-|---|---|---|---|
-| 1 | Anterior Atlantoaxial Dislocation | 寰椎前脱位 | Anterior AAD |
-| 2 | Posterior Atlantoaxial Dislocation | 寰椎后脱位 | Posterior AAD |
-| 3 | Basilar Invagination | 颅底凹陷 | BI |
-| 4 | Os Odontoideum | 齿突不连 | OO |
-| 5 | Occipitalization of Atlas | 寰椎枕化 | — |
-| 6 | C2-3 Non-segmentation | 颈 2-3 分节不全 | C2-3 NS |
+| # | Disease | Abbreviation |
+|---|---|---|
+| 1 | Anterior Atlantoaxial Dislocation | Anterior AAD |
+| 2 | Posterior Atlantoaxial Dislocation | Posterior AAD |
+| 3 | Basilar Invagination | BI |
+| 4 | Os Odontoideum | OO |
+| 5 | Occipitalization of the Atlas | — |
+| 6 | C2–3 Non-segmentation | C2–3 NS |
 
-> ⚠️ **互斥约束**: 寰椎前脱位 与 寰椎后脱位 不能同时为阳性（训练时加入 mutex penalty λ=0.5）
+**Mutual-exclusion constraint:** Anterior and posterior atlantoaxial dislocation cannot both be positive. A mutual-exclusion penalty with λ = 0.5 is included during training.
 
 ---
 
-## 4. 模型性能 / Performance
+## 4. Performance
 
-### 内部验证集 (Internal Validation)
-1,153 张图 / 2,530 个标签实例 (来自同一医院，患者级划分)
+### Internal Validation
 
-#### Multilabel (6 类)
+The multilabel validation set contains 1,153 images and 2,530 positive label instances from the same hospital, using a patient-level split.
 
-| 疾病 | F1 | AUC | 支持数 |
+#### Multilabel Classification: Six Classes
+
+| Disease | F1 | AUC | Support |
 |---|---|---|---|
 | Anterior AAD | 0.9485 | 0.9545 | 876 |
 | Posterior AAD | 0.8528 | 0.9845 | 129 |
 | Basilar Invagination | 0.8453 | 0.9499 | 344 |
 | Os Odontoideum | 0.8911 | 0.9548 | 511 |
-| Occipitalization of Atlas | 0.9119 | 0.9659 | 414 |
-| C2-3 Non-segmentation | 0.9059 | 0.9792 | 256 |
-| **Macro 平均** | **0.8926** | **0.9648** | — |
+| Occipitalization of the Atlas | 0.9119 | 0.9659 | 414 |
+| C2–3 Non-segmentation | 0.9059 | 0.9792 | 256 |
+| **Macro Average** | **0.8926** | **0.9648** | — |
 
-| 指标 | 值 |
+| Metric | Value |
 |---|---|
-| F1_macro | 0.8926 |
-| AUC_macro | 0.9648 |
-| Exact Match (全对) | 70.60% |
-| ECE (校准误差) | 0.0544 |
+| Macro F1 | 0.8926 |
+| Macro AUC | 0.9648 |
+| Exact Match | 70.60% |
+| Expected Calibration Error (ECE) | 0.0544 |
 
-#### Binary (有病/无病)
+#### Binary Classification: Disease Present or Absent
 
-| 指标 | 值 |
+| Metric | Value |
 |---|---|
 | AUC | **0.9938** |
 | Accuracy | 0.9684 |
 | F1 | 0.9779 |
 | ECE | 0.0210 |
 
-### 前瞻测试集 (Prospective, N=267)
-另一家新医院，完全不同数据域
+### Prospective Testing (N = 267)
 
-| Multilabel | F1_macro | AUC_macro | Exact |
+This cohort was collected prospectively at Hospital A, from October 1, 2024, to January 31, 2025.
+
+| Multilabel Evaluation | Macro F1 | Macro AUC | Exact Match |
 |---|---|---|---|
-| 内部验证 | 0.8926 | 0.9648 | 70.6% |
-| **前瞻测试** | **0.8868** | **0.9612** | **65.4%** |
-| Δ | −0.006 | −0.004 | −5.2% |
+| Internal validation | 0.8926 | 0.9648 | 70.6% |
+| **Prospective testing** | **0.8868** | **0.9612** | **65.4%** |
+| Change | −0.006 | −0.004 | −5.2 percentage points |
 
-| Binary | AUC | Acc |
+| Binary Evaluation | AUC | Accuracy |
 |---|---|---|
-| 内部验证 | 0.9938 | 0.9684 |
-| **前瞻测试** | **0.9119** | **0.9362** |
+| Internal validation | 0.9938 | 0.9684 |
+| **Prospective testing** | **0.9119** | **0.9362** |
 
-### 外部多中心验证 (External Validation, N=643)
-4 家独立医院
+### External Multicenter Validation (N = 643)
 
-| Multilabel | F1_macro | AUC_macro | Exact |
+The external validation cohort includes images from four independent hospitals.
+
+| Multilabel Evaluation | Macro F1 | Macro AUC | Exact Match |
 |---|---|---|---|
-| 内部验证 | 0.8926 | 0.9648 | 70.6% |
-| **外部验证** | **0.8091** | **0.9329** | **55.8%** |
-| Δ | −0.083 | −0.032 | −14.8% |
+| Internal validation | 0.8926 | 0.9648 | 70.6% |
+| **External validation** | **0.8091** | **0.9329** | **55.8%** |
+| Change | −0.083 | −0.032 | −14.8 percentage points |
 
-| 分医院 | 图数 | ML F1_macro | ML Exact | Binary AUC |
+| Hospital | Images | Multilabel Macro F1 | Multilabel Exact Match | Binary AUC |
 |---|---|---|---|---|
-| 浙大二院 | 380 | 0.8258 | 56.3% | 0.8735 |
-| 盛京医院 | 57 | 0.8699 | 77.2% | 0.9340 |
-| 河北三院 | 71 | 0.7460 | 40.9% | 0.7575 |
-| 吉大三院 | 135 | 0.7169 | 53.3% | 0.6953 |
+| Second Hospital of Zhejiang University | 380 | 0.8258 | 56.3% | 0.8735 |
+| Shengjing Hospital | 57 | 0.8699 | 77.2% | 0.9340 |
+| Hebei Third Hospital | 71 | 0.7460 | 40.9% | 0.7575 |
+| Jilin University Third Hospital | 135 | 0.7169 | 53.3% | 0.6953 |
 
 ---
 
-## 5. 部署使用 / Deployment
+## 5. Deployment
 
-### 环境依赖
+### Dependencies
 
-```
+```text
 Python >= 3.9
 torch >= 2.0
 torchvision >= 0.15
-ultralytics >= 8.0 (用于 YOLOv8)
+ultralytics >= 8.0 (for YOLOv8)
 pillow
 numpy
 ```
@@ -143,23 +150,27 @@ numpy
 pip install torch torchvision ultralytics pillow numpy
 ```
 
-### 快速开始
+### Quick Start
+
+Before running the following commands, place the three required final weight files in `deploy/`. The repository does not currently include demonstration radiographs.
 
 ```bash
-# 单张图推理
-python deploy/inference.py --image chest_xray.jpg
+# Run inference on a single cervical spine radiograph
+python deploy/inference.py --image cervical_xray.jpg
 
-# 指定 bbox (跳过 YOLO)
-python deploy/inference.py --image chest_xray.jpg --bbox "100,200,300,400"
+# Specify a bounding box to bypass YOLO detection
+python deploy/inference.py --image cervical_xray.jpg --bbox "100,200,300,400"
 
-# 批量推理
+# Run batch inference
 python deploy/inference.py --dir /path/to/images/ --output results.csv
 
-# GPU
+# Run inference on a GPU
 python deploy/inference.py --image xray.jpg --device cuda
 ```
 
-### 输出格式
+### Output Format
+
+The following example illustrates the output structure. The `name_cn` fields contain Chinese disease names returned by the API. The timing values are illustrative and are not a runtime guarantee for other hardware.
 
 ```json
 {
@@ -179,12 +190,12 @@ python deploy/inference.py --image xray.jpg --device cuda
 }
 ```
 
-### 平台集成要点
+### Platform Integration
 
-1. **用户可修正 bbox**: 调用 `engine.predict(image, bbox=(xmin,ymin,xmax,ymax))` 跳过了 YOLO 检测
-2. **结果展示**: `disease_present` 判断有无病，`diseases_found` 列出所有发现的疾病及置信度
-3. **若无病**: `diseases_found=[]`, `disease_present=false`, 显示 `disease_present_confidence`
-4. **若有病**: `diseases_found` 按置信度从高到低排列
+1. **Manual bounding-box adjustment:** Call `engine.predict(image, bbox=(xmin, ymin, xmax, ymax))` to bypass YOLO detection and use the supplied bounding box.
+2. **Result display:** Use `disease_present` to indicate disease presence and `diseases_found` to display detected diseases and confidence scores.
+3. **No disease detected:** When `diseases_found=[]` and `disease_present=false`, display `disease_present_confidence`.
+4. **Disease detected:** Display `diseases_found` in descending order of confidence.
 
 ### Python API
 
@@ -193,39 +204,41 @@ from deploy.inference import SpineInference
 
 engine = SpineInference("deploy/", device="cuda")
 
-# 自动 YOLO 检测
+# Automatic YOLO detection
 result = engine.predict("xray.jpg")
 
-# 手动 bbox 覆盖
+# Override detection with a manual bounding box
 result = engine.predict("xray.jpg", bbox=(100, 150, 300, 350))
 
 print(result["disease_present"])
 for d in result["diseases_found"]:
-    print(f"  {d['name_cn']}: {d['confidence']:.4f}")
+    print(f"  {d['name_en']}: {d['confidence']:.4f}")
 ```
 
 ---
 
-## 6. 目录结构 / Project Structure
+## 6. Project Structure
 
-```
+The following layout shows the deployment files and result folders. Weight files must be supplied separately; the layout does not imply that all listed artifacts are included in the current release.
+
+```text
 Atlantoaxial_Disease_Classifier/
 ├── deploy/
-│   ├── inference.py          # 推理脚本 (独立, 无项目依赖)
-│   ├── config.json            # 模型配置 & 性能指标
-│   ├── yolo_best.pt           # YOLOv8s 脊柱检测 (22 MB)
-│   ├── binary_best.pt         # ResNet50 二分类 (90 MB)
-│   ├── multilabel_best.pt     # ResNet50 多标签 (91 MB)
-│   └── README.md              # 本文档
+│   ├── inference.py          # Standalone inference script; no imports from other project modules
+│   ├── config.json           # Model configuration and performance metrics
+│   ├── yolo_best.pt          # YOLOv8s spine detector (22 MB; not included)
+│   ├── binary_best.pt        # Binary ResNet50 (90 MB; not included)
+│   ├── multilabel_best.pt    # Multilabel ResNet50 (91 MB; not included)
+│   └── README.md             # This document
 └── results/
-    ├── internal_val/          # 内部验证集结果
-    │   ├── multilabel/        # 6×6 混淆矩阵, ROC, 校准曲线等
-    │   └── binary/            # 2×2 混淆矩阵, ROC 等
-    ├── prospective_test/      # 前瞻测试集结果 (267张)
+    ├── internal_val/         # Internal validation results
+    │   ├── multilabel/       # 6 × 6 confusion matrix, ROC curves, calibration plots, etc.
+    │   └── binary/           # 2 × 2 confusion matrix, ROC curves, etc.
+    ├── prospective_test/     # Prospective test results (267 images)
     │   ├── summary.json
     │   ├── multilabel/
     │   └── binary/
-    └── external_val/          # 外部多中心验证 (643张, 4医院)
+    └── external_val/         # External multicenter validation (643 images, four hospitals)
         ├── summary.json
         ├── multilabel/
         └── binary/
@@ -233,43 +246,43 @@ Atlantoaxial_Disease_Classifier/
 
 ---
 
-## 7. 训练配置 / Training Details
+## 7. Training Details
 
-| 参数 | 值 |
+| Parameter | Value |
 |---|---|
-| Backbone | ResNet50 (ImageNet 预训练) |
-| 优化器 | AdamW (lr=1e-4, wd=1e-4) |
-| 调度器 | CosineAnnealingLR (T_max=100) |
-| 损失函数 (Binary) | BCEWithLogitsLoss |
-| 损失函数 (Multilabel) | BCEWithLogitsLoss + pos_weight + mutex_penalty (λ=0.5) |
-| 图像尺寸 | 224×224 (crop 后) |
-| ROI 模式 | 50% crop / 50% 原图 |
-| Batch Size | 32 |
-| AMP | ✅ |
-| 早停 | patience=15 |
-| 数据划分 | GroupShuffleSplit (按患者, 15% 验证) |
+| Backbone | ResNet50 with ImageNet-pretrained weights |
+| Optimizer | AdamW (learning rate = 1e-4, weight decay = 1e-4) |
+| Scheduler | CosineAnnealingLR (T_max = 100) |
+| Binary loss | BCEWithLogitsLoss |
+| Multilabel loss | BCEWithLogitsLoss + pos_weight + mutex_penalty (λ = 0.5) |
+| Image size | 224 × 224 after cropping/resizing |
+| ROI sampling | 50% cropped ROI / 50% full image |
+| Batch size | 32 |
+| Automatic mixed precision (AMP) | Enabled |
+| Early stopping | Patience = 15 |
+| Data split | Patient-grouped GroupShuffleSplit, with a 15% validation fraction |
 
 ---
 
-## 8. 结果图说明 / Plot Guide
+## 8. Plot Guide
 
-| 文件 | 级别 | 含义 |
+| File | Evaluation Level | Description |
 |---|---|---|
-| `confusion_matrix.png` | 标签级 | 6×6 矩阵: 真实病种→预测病种计数 |
-| `error_decomposition.png` | 标签级 | 真实假阳性矩阵 (排除共病重叠) + P/R/F1 柱状图 |
-| `diagnostic_image_level.png` | 图像级 | 3类评估 (全对/漏诊/误诊) + 正确标签数分布 |
-| `roc_curves.png` | 标签级 | 6条 ROC + macro-avg |
-| `calibration_curves.png` | 标签级 | 可靠性图 (校准度) |
-| `confidence_dist.png` | 标签级 | 正/负样本的置信度分布 |
+| `confusion_matrix.png` | Label level | 6 × 6 matrix of true-disease versus predicted-disease counts |
+| `error_decomposition.png` | Label level | False-positive counts excluding co-occurring ground-truth diseases, with precision/recall/F1 bar charts |
+| `diagnostic_image_level.png` | Image level | Three-category evaluation (complete match, missed diagnosis, incorrect diagnosis) and distribution of the number of correctly predicted labels |
+| `roc_curves.png` | Label level | ROC curves for six classes and the macro average |
+| `calibration_curves.png` | Label level | Reliability diagrams for probability calibration |
+| `confidence_dist.png` | Label level | Confidence distributions for positive and negative samples |
 
 ---
 
-## 9. 版本历史 / Changelog
+## 9. Changelog
 
-| 版本 | 日期 | 内容 |
+| Version | Date | Description |
 |---|---|---|
-| v1.0 | 2026-06-17 | 初始发布: 内部验证 + 前瞻测试 + 多中心外部验证 |
+| v1.0 | 2026-06-17 | Initial release: internal validation, prospective testing, and external multicenter validation |
 
 ---
 
-*如有问题请联系项目负责人。*
+*For questions, please contact the project lead.
