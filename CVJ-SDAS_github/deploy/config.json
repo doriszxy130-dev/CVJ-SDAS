@@ -71,7 +71,7 @@
   "external_validation": {
     "datasets": {
       "prospective": {
-        "n_images": 266,
+        "n_images": 267,
         "multilabel_f1_macro": 0.8868,
         "multilabel_auc_macro": 0.9612,
         "binary_auc": 0.9119
