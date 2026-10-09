@@ -94,7 +94,7 @@
 | F1 | 0.9779 |
 | ECE | 0.0210 |
 
-### 前瞻测试集 (Prospective, N=266)
+### 前瞻测试集 (Prospective, N=267)
 另一家新医院，完全不同数据域
 
 | Multilabel | F1_macro | AUC_macro | Exact |
@@ -221,7 +221,7 @@ Atlantoaxial_Disease_Classifier/
     ├── internal_val/          # 内部验证集结果
     │   ├── multilabel/        # 6×6 混淆矩阵, ROC, 校准曲线等
     │   └── binary/            # 2×2 混淆矩阵, ROC 等
-    ├── prospective_test/      # 前瞻测试集结果 (266张)
+    ├── prospective_test/      # 前瞻测试集结果 (267张)
     │   ├── summary.json
     │   ├── multilabel/
     │   └── binary/
